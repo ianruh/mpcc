@@ -1,0 +1,26 @@
+load("@emsdk//emscripten_toolchain:wasm_rules.bzl", "wasm_cc_binary")
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+
+cc_binary(
+    name = "mpcc_wasm_base",
+    srcs = ["bindings.cc"],
+    copts = ["-fexceptions"],
+    linkopts = [
+        "--bind",
+        "-fexceptions",
+        "-sEXPORT_ES6=1",
+        "-sMODULARIZE=1",
+        "-sEXPORT_NAME=MPCC",
+        "-sALLOW_MEMORY_GROWTH=1",
+    ],
+    deps = [
+        "//core:core",
+        "@xtensor",
+    ],
+)
+
+wasm_cc_binary(
+    name = "mpcc_wasm",
+    cc_target = ":mpcc_wasm_base",
+    visibility = ["//visibility:public"],
+)

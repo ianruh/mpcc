@@ -1,0 +1,11 @@
+# Root BUILD file for mpcc
+
+load("@rules_python//python:pip.bzl", "compile_pip_requirements")
+
+# Run `bazel run //:requirements.update` to regenerate requirements.txt
+# from requirements.in after adding or changing dependencies.
+compile_pip_requirements(
+    name = "requirements",
+    requirements_in = "requirements.in",
+    requirements_txt = "requirements.txt",
+)

@@ -1,0 +1,43 @@
+module(
+    name = "mpcc",
+    version = "0.0.1",
+)
+
+# Platform definitions (required by other rules)
+bazel_dep(name = "platforms", version = "0.0.10")
+
+# C++ rules
+bazel_dep(name = "rules_cc", version = "0.0.9")
+
+# Python rules
+bazel_dep(name = "rules_python", version = "0.31.0")
+
+# nanobind for Python bindings
+bazel_dep(name = "nanobind_bazel", version = "2.0.0")
+
+# GoogleTest for C++ testing
+bazel_dep(name = "googletest", version = "1.14.0")
+
+# Emscripten SDK for WASM/embind
+bazel_dep(name = "emsdk", version = "4.0.17")
+
+bazel_dep(name = "xtensor", version = "0.27.1")
+
+# Python toolchain registration
+python = use_extension("@rules_python//python/extensions:python.bzl", "python")
+python.toolchain(
+    python_version = "3.11",
+)
+use_repo(python, "python_3_11")
+
+# Register the Python toolchain
+register_toolchains("@python_3_11//:all")
+
+# Pip dependencies
+pip = use_extension("@rules_python//python/extensions:pip.bzl", "pip")
+pip.parse(
+    hub_name = "pip",
+    python_version = "3.11",
+    requirements_lock = "//:requirements.txt",
+)
+use_repo(pip, "pip")

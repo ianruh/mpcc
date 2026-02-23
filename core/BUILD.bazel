@@ -1,0 +1,16 @@
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+
+cc_library(
+    name = "core",
+    hdrs = ["matrix_profile.h"],
+    visibility = ["//visibility:public"],
+)
+
+# cc_test(
+#     name = "matrix_profile_test",
+#     srcs = ["matrix_porfile_test.cc"],
+#     deps = [
+#         ":core",
+#         "@googletest//:gtest_main",
+#     ],
+# )
