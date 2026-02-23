@@ -6,40 +6,18 @@
   <title>MPCC — Matrix Profile Explorer</title>
   <link rel="stylesheet" href="./styles.css">
   <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <script type="importmap">
+  {
+    "imports": {
+      "preact":       "https://esm.sh/preact@10.25.4",
+      "preact/hooks": "https://esm.sh/preact@10.25.4/hooks",
+      "htm/preact":   "https://esm.sh/htm@3.1.1/preact"
+    }
+  }
+  </script>
 </head>
 <body>
-
-  <header>
-    <h1>MPCC — <em>Matrix Profile Explorer</em></h1>
-    <span class="subtitle">Upload a time series CSV or JSON, configure m, then compute.</span>
-  </header>
-
-  <div id="controls-bar" class="controls-bar"></div>
-
-  <div class="plots-area">
-    <div class="plot-card">
-      <div class="plot-card-header">
-        <span class="plot-title">Time Series</span>
-        <span class="plot-desc" id="ts-desc">—</span>
-      </div>
-      <div class="plot-el" id="ts-plot"></div>
-    </div>
-    <div class="plot-card">
-      <div class="plot-card-header">
-        <span class="plot-title">Matrix Profile</span>
-        <span class="plot-desc" id="mp-desc">—</span>
-      </div>
-      <div class="plot-el" id="mp-plot"></div>
-    </div>
-    <div class="plot-card">
-      <div class="plot-card-header">
-        <span class="plot-title">Similarity Search</span>
-        <span class="plot-desc" id="ss-desc">—</span>
-      </div>
-      <div class="plot-el" id="ss-plot"></div>
-    </div>
-  </div>
-
+  <div id="app"></div>
   <script type="module" src="./app.js"></script>
 </body>
 </html>

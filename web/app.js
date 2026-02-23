@@ -1,91 +1,146 @@
-import appState from './state.js';
-import { createPlots, createControls } from './components.js';
+import { html }                   from 'htm/preact';
+import { render }                  from 'preact';
+import { useState, useEffect }     from 'preact/hooks';
+import { parseFile }               from './lib/parser.js';
+import {
+  loadWasm,
+  computeMatrixProfile,
+  computeSimilaritySearch,
+  findMotifIndex,
+} from './lib/wasm.js';
+import { Controls }  from './components/Controls.js';
+import { PlotsArea } from './components/Plots.js';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// createApp
-//   Wires state, controls, and plots together. Returns { init() }.
-// ─────────────────────────────────────────────────────────────────────────────
-function createApp(state, { controlsEl, tsEl, mpEl, ssEl, tsDescEl, mpDescEl, ssDescEl }) {
-  function onPointClick(idx) {
-    if (!state.wasm || !state.series) return;
-    const { series, m } = state;
-    // Clamp so the subsequence never runs past the end of the series
-    const queryIdx = Math.max(0, Math.min(idx, series.length - m));
-    const query    = series.slice(queryIdx, queryIdx + m);
+function App() {
+  const [wasm, setWasm]                         = useState(null);
+  const [allSeries, setAllSeries]               = useState([]);
+  const [filename, setFilename]                 = useState(null);
+  const [seriesIdx, setSeriesIdx]               = useState(0);
+  const [m, setM]                               = useState(20);
+  const [matrixProfile, setMatrixProfile]       = useState(null);
+  const [similaritySearch, setSimilaritySearch] = useState(null);
+  const [computing, setComputing]               = useState(false);
+  const [status, setStatus]                     = useState({ type: 'busy', message: 'Loading WASM…' });
+
+  const series = allSeries[seriesIdx]?.values ?? null;
+
+  // Load WASM once on mount.
+  useEffect(() => {
+    loadWasm()
+      .then(instance => {
+        setWasm(instance);
+        setStatus({ type: 'success', message: 'Ready — upload a file to begin' });
+      })
+      .catch(err => {
+        console.error('WASM load error:', err);
+        setStatus({ type: 'error', message: 'WASM not found — run the Bazel build first (see README)' });
+      });
+  }, []);
+
+  async function handleFile(file) {
+    setStatus({ type: 'busy', message: 'Parsing…' });
     try {
-      const distances = state.wasm.similaritySearch(series, query);
-      ssDescEl.textContent = `query @ ${queryIdx}, m=${m}`;
-      plots.updateSimilaritySearch(distances, queryIdx, m);
+      const parsed = await parseFile(file);
+      setAllSeries(parsed);
+      setSeriesIdx(0);
+      setFilename(file.name);
+      setMatrixProfile(null);
+      setSimilaritySearch(null);
+      const msg = parsed.length > 1
+        ? `Loaded ${parsed.length} series — select one to analyze`
+        : `Loaded ${parsed[0].values.length.toLocaleString()} data points`;
+      setStatus({ type: 'success', message: msg });
+    } catch (err) {
+      setStatus({ type: 'error', message: err.message });
+    }
+  }
+
+  function handleSeriesChange(idx) {
+    setSeriesIdx(idx);
+    setMatrixProfile(null);
+    setSimilaritySearch(null);
+  }
+
+  function handleCompute() {
+    if (isNaN(m) || m < 4) {
+      setStatus({ type: 'error', message: 'm must be ≥ 4' });
+      return;
+    }
+    if (!series || series.length < m * 2) {
+      setStatus({ type: 'error', message: `Series too short for m=${m} (need ≥ ${m * 2} points)` });
+      return;
+    }
+
+    const msg = series.length > 5000
+      ? `Large series (${series.length.toLocaleString()} pts) — computation may take a moment…`
+      : 'Computing…';
+    setStatus({ type: 'busy', message: msg });
+    setComputing(true);
+
+    // Yield to the browser so the spinner renders before WASM blocks the thread.
+    setTimeout(() => {
+      try {
+        const result    = computeMatrixProfile(wasm, series, m);
+        const motifIdx  = findMotifIndex(result.distances);
+        const profileLen = result.distances.length.toLocaleString();
+        const doneMsg   = motifIdx >= 0
+          ? `Done — m=${m}, ${profileLen} values · min distance ${result.distances[motifIdx].toFixed(4)}`
+          : `Done — m=${m}, ${profileLen} values`;
+
+        setMatrixProfile(result);
+        setSimilaritySearch(null);
+        setStatus({ type: 'success', message: doneMsg });
+      } catch (err) {
+        setStatus({ type: 'error', message: err.message });
+      } finally {
+        setComputing(false);
+      }
+    }, 20);
+  }
+
+  function handlePointClick(idx) {
+    if (!wasm || !series) return;
+    try {
+      const result = computeSimilaritySearch(wasm, series, idx, m);
+      setSimilaritySearch(result);
     } catch (err) {
       console.error('Similarity search failed:', err);
     }
   }
 
-  const plots = createPlots(tsEl, mpEl, ssEl, { onPointClick });
-  const controls = createControls(controlsEl, {
+  const canCompute = !!wasm && !!series && !computing;
 
-    onFileLoad(series) {
-      state.series = series;
-      state.mp     = null;
-      tsDescEl.textContent = `${series.length.toLocaleString()} points`;
-      mpDescEl.textContent = '—';
-      plots.updateSeries(series, null, state.m);
-    },
+  return html`
+    <header>
+      <h1>MPCC — <em>Matrix Profile Explorer</em></h1>
+      <span class="subtitle">Upload a time series CSV or JSON, configure m, then compute.</span>
+    </header>
 
-    onCompute() {
-      const { wasm, series, m } = state;
-      const result = wasm.matrixProfileNaive(series, m);
-      state.mp = result;
+    <div class="controls-bar">
+      <${Controls}
+        filename=${filename}
+        pointCount=${series?.length}
+        allSeries=${allSeries}
+        seriesIdx=${seriesIdx}
+        onSeriesChange=${handleSeriesChange}
+        m=${m}
+        onMChange=${setM}
+        canCompute=${canCompute}
+        computing=${computing}
+        status=${status}
+        onFile=${handleFile}
+        onCompute=${handleCompute}
+      />
+    </div>
 
-      const profileLen = result.distances.length;
-      const finite     = Array.from(result.distances).filter(isFinite);
-      const minDist    = finite.length > 0 ? Math.min(...finite) : NaN;
-
-      plots.updateSeries(series, result, m);
-      plots.updateMatrixProfile(result, m);
-
-      tsDescEl.textContent = `${series.length.toLocaleString()} points · m=${m}`;
-      mpDescEl.textContent = isFinite(minDist)
-        ? `${profileLen.toLocaleString()} values · min distance ${minDist.toFixed(4)}`
-        : `${profileLen.toLocaleString()} values`;
-
-      controls.setStatus(
-        `Done — m=${m}, ${profileLen.toLocaleString()} profile values`,
-        'success'
-      );
-    },
-  });
-
-  async function init() {
-    controls.setStatus('Loading WASM module…', 'busy');
-    try {
-      const { default: initMPCC } = await import('./mpcc_wasm_base.js');
-      state.wasm = await initMPCC();
-      controls.setStatus('Ready — upload a file to begin', 'success');
-      if (state.series) controls.enableCompute(true);
-    } catch (err) {
-      controls.setStatus(
-        'WASM not found — run the Bazel build first (see README)',
-        'error'
-      );
-      console.error('WASM load error:', err);
-    }
-  }
-
-  return { init };
+    <${PlotsArea}
+      series=${series}
+      matrixProfile=${matrixProfile}
+      similaritySearch=${similaritySearch}
+      m=${m}
+      onPointClick=${handlePointClick}
+    />
+  `;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Bootstrap
-// ─────────────────────────────────────────────────────────────────────────────
-const app = createApp(appState, {
-  controlsEl: document.getElementById('controls-bar'),
-  tsEl:       document.getElementById('ts-plot'),
-  mpEl:       document.getElementById('mp-plot'),
-  ssEl:       document.getElementById('ss-plot'),
-  tsDescEl:   document.getElementById('ts-desc'),
-  mpDescEl:   document.getElementById('mp-desc'),
-  ssDescEl:   document.getElementById('ss-desc'),
-});
-
-app.init();
+render(html`<${App} />`, document.getElementById('app'));
