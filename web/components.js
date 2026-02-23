@@ -107,7 +107,7 @@ export function createFileParser() {
 //   Returns { updateSeries(series, mpResult, m), updateMatrixProfile(mpResult, m) }
 //   Manages the two Plotly charts (time series and matrix profile).
 // ─────────────────────────────────────────────────────────────────────────────
-export function createPlots(tsEl, mpEl) {
+export function createPlots(tsEl, mpEl, ssEl, { onPointClick } = {}) {
 
   // Shared Plotly layout fragments
   const BASE_LAYOUT = {
@@ -152,6 +152,25 @@ export function createPlots(tsEl, mpEl) {
       showarrow: false, font: { size: 14, color: '#30363d' },
     }],
   }, PLOT_CONFIG);
+
+  Plotly.newPlot(ssEl, [], {
+    ...BASE_LAYOUT,
+    annotations: [{
+      text: 'Click a point on either plot above to run a similarity search',
+      xref: 'paper', yref: 'paper', x: 0.5, y: 0.5,
+      showarrow: false, font: { size: 14, color: '#30363d' },
+    }],
+  }, PLOT_CONFIG);
+
+  // Register click handlers on both plots — Plotly attaches .on() to the div
+  // after newPlot, so these registrations are safe here.
+  if (onPointClick) {
+    const handler = data => {
+      if (data.points?.[0]) onPointClick(Math.round(data.points[0].x));
+    };
+    tsEl.on('plotly_click', handler);
+    mpEl.on('plotly_click', handler);
+  }
 
   // Build vrect shapes for motif / nearest-neighbour on the time series plot
   function buildMotifShapes(mpResult, m) {
@@ -261,7 +280,63 @@ export function createPlots(tsEl, mpEl) {
     }, PLOT_CONFIG);
   }
 
-  return { updateSeries, updateMatrixProfile };
+  // distances: Float64Array from wasm.similaritySearch
+  // queryIdx:  starting index of the query subsequence in the original series
+  // m:         subsequence length
+  function updateSimilaritySearch(distances, queryIdx, m) {
+    const n = distances.length;
+    const x = Array.from({ length: n }, (_, i) => i);
+    const y = Array.from(distances).map(v => isFinite(v) ? v : null);
+
+    // Find the best match outside the exclusion zone around the query
+    const exclZone = Math.floor(m / 4);
+    let bestIdx = -1;
+    let minDist  = Infinity;
+    for (let i = 0; i < n; i++) {
+      if (Math.abs(i - queryIdx) <= exclZone) continue;
+      if (y[i] !== null && y[i] < minDist) { minDist = y[i]; bestIdx = i; }
+    }
+
+    const traces = [{
+      x, y,
+      type: 'scatter', mode: 'lines',
+      connectgaps: false,
+      line: { color: '#4ade80', width: 1.2 },
+      name: 'Distance Profile',
+    }];
+
+    if (bestIdx >= 0) {
+      traces.push({
+        x: [bestIdx], y: [y[bestIdx]],
+        type: 'scatter', mode: 'markers',
+        marker: { symbol: 'star', size: 10, color: '#fb923c' },
+        name: `Best match @ ${bestIdx} (d=${y[bestIdx].toFixed(3)})`,
+      });
+    }
+
+    Plotly.react(ssEl, traces, {
+      ...BASE_LAYOUT,
+      showlegend: bestIdx >= 0,
+      xaxis: { ...BASE_LAYOUT.xaxis, title: { text: 'Index', font: { size: 11 } } },
+      yaxis: { ...BASE_LAYOUT.yaxis, title: { text: 'Distance', font: { size: 11 } }, rangemode: 'tozero' },
+      shapes: [{
+        type: 'line',
+        xref: 'x', yref: 'paper',
+        x0: queryIdx, x1: queryIdx,
+        y0: 0, y1: 1,
+        line: { color: '#a78bfa', width: 1.5, dash: 'dot' },
+      }],
+      annotations: [{
+        x: queryIdx, y: 1.06,
+        xref: 'x', yref: 'paper',
+        text: `Query @ ${queryIdx}`,
+        showarrow: false,
+        font: { size: 10, color: '#a78bfa' },
+      }],
+    }, PLOT_CONFIG);
+  }
+
+  return { updateSeries, updateMatrixProfile, updateSimilaritySearch };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

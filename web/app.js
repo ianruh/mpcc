@@ -5,8 +5,23 @@ import { createPlots, createControls } from './components.js';
 // createApp
 //   Wires state, controls, and plots together. Returns { init() }.
 // ─────────────────────────────────────────────────────────────────────────────
-function createApp(state, { controlsEl, tsEl, mpEl, tsDescEl, mpDescEl }) {
-  const plots    = createPlots(tsEl, mpEl);
+function createApp(state, { controlsEl, tsEl, mpEl, ssEl, tsDescEl, mpDescEl, ssDescEl }) {
+  function onPointClick(idx) {
+    if (!state.wasm || !state.series) return;
+    const { series, m } = state;
+    // Clamp so the subsequence never runs past the end of the series
+    const queryIdx = Math.max(0, Math.min(idx, series.length - m));
+    const query    = series.slice(queryIdx, queryIdx + m);
+    try {
+      const distances = state.wasm.similaritySearch(series, query);
+      ssDescEl.textContent = `query @ ${queryIdx}, m=${m}`;
+      plots.updateSimilaritySearch(distances, queryIdx, m);
+    } catch (err) {
+      console.error('Similarity search failed:', err);
+    }
+  }
+
+  const plots = createPlots(tsEl, mpEl, ssEl, { onPointClick });
   const controls = createControls(controlsEl, {
 
     onFileLoad(series) {
@@ -67,8 +82,10 @@ const app = createApp(appState, {
   controlsEl: document.getElementById('controls-bar'),
   tsEl:       document.getElementById('ts-plot'),
   mpEl:       document.getElementById('mp-plot'),
+  ssEl:       document.getElementById('ss-plot'),
   tsDescEl:   document.getElementById('ts-desc'),
   mpDescEl:   document.getElementById('mp-desc'),
+  ssDescEl:   document.getElementById('ss-desc'),
 });
 
 app.init();
