@@ -102,13 +102,6 @@ export function createFileParser() {
   };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// createPlots
-//   Returns { updateSeries(series, mpResult, m), updateMatrixProfile(mpResult, m) }
-//   Manages the two Plotly charts (time series and matrix profile).
-// ─────────────────────────────────────────────────────────────────────────────
-export function createPlots(tsEl, mpEl, ssEl, { onPointClick } = {}) {
-
   // Shared Plotly layout fragments
   const BASE_LAYOUT = {
     paper_bgcolor: 'transparent',
@@ -132,7 +125,15 @@ export function createPlots(tsEl, mpEl, ssEl, { onPointClick } = {}) {
     },
     showlegend: false,
   };
-  const PLOT_CONFIG = { responsive: true, displayModeBar: 'hover', displaylogo: false };
+  const PLOT_CONFIG = { responsive: true, displayModeBar: false, displaylogo: false };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// createPlots
+//   Returns { updateSeries(series, mpResult, m), updateMatrixProfile(mpResult, m) }
+//   Manages the two Plotly charts (time series and matrix profile).
+// ─────────────────────────────────────────────────────────────────────────────
+export function createPlots(tsEl, mpEl, ssEl, { onPointClick } = {}) {
+
 
   // Initialise empty plots
   Plotly.newPlot(tsEl, [], {
